@@ -16,7 +16,7 @@ def symbolic_dynamics():
     Returns (Tuple[Dict, Dict]): dynamic functions in a nested dict and reset functions in a nested dict.
     TODO: FILL IN WITH BOUNCING BALL. Modes are {'up','down'}. e is coefficient of resititution.
     """
-    x1, x2, u, dt = sp.symbols("x1 x2 u dt")
+    q, q_dot, e, u, dt = sp.symbols("q q_dot e u dt")
 
     """ Define the states and inputs. """
     inputs = Matrix([u])  # note inputs don't matter

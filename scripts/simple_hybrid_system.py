@@ -147,7 +147,7 @@ for time_idx in range(1,n_simulate_timesteps):
     actual_states[time_idx,:] = hybrid_simulator.get_state()
     measurements[time_idx-1,:] = hybrid_simulator.get_measurement(measurement_noise_flag=True)
     skf.predict(timesteps[time_idx],zero_input)
-    filtered_states[time_idx,:], current_cov = skf.update(measurements[time_idx-1,:])
+    filtered_states[time_idx,:], current_cov = skf.update(timesteps[time_idx],zero_input,measurements[time_idx-1,:])
 
 plt.plot(actual_states[:,0],actual_states[:,1],'k-',label='Actual states')
 plt.plot(measurements[:,0],measurements[:,1],'r.',label='Measurements')
