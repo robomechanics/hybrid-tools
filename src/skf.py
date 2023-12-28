@@ -131,7 +131,6 @@ class SKF:
                 hybrid_event_time,
                 new_mode,
             ) = solve_ivp_extract_hybrid_events(sol, possible_modes)
-            print('')
 
         """ Once no more hybrid events, grab the terminal states. """
         for idx in range(len(sol.y)):
@@ -150,7 +149,7 @@ class SKF:
         self._current_state = current_state
         return self._current_state, self._current_cov
 
-    def update(self, measurement):
+    def update(self, current_time, current_input, measurement):
         """
         Posterior update.
         When a new measurement comes in, update the covariance.
@@ -176,6 +175,35 @@ class SKF:
         self._current_state = self._current_state + K@residual
         self._current_cov = self._current_cov - K@C@self._current_cov
 
-        """ Check guard conditions. """
+        """ Check guard conditions. If any guard is has been reached, then apply hybrid posterior update. """
+        current_guards, possible_modes = solve_ivp_guard_funcs(
+            self._guards_dict, self._current_mode, current_input, self._dt, self._parameters
+        )
+        for guard_idx in range(len(current_guards)):
+            """TODO: Add in time component. """
+            if current_guards[guard_idx](current_time, self._current_state) < 0:
+                print("Debug: Applying posterior hybrid update.")
+                new_mode = possible_modes[guard_idx]
+                """Apply reset."""
+                new_state = self._resets_dict[self._current_mode][new_mode]['r'](
+                    self._current_state, current_input, self._dt, self._parameters
+                ).reshape(np.shape(self._current_state))
+
+                """ Apply covairance updates: dynamics and saltation matrix."""
+                salt = compute_saltation_matrix(
+                    pre_event_state=self._current_state,
+                    inputs=current_input,
+                    dt=self._dt,
+                    parameters=self._parameters,
+                    pre_mode=self._current_mode,
+                    post_mode=new_mode,
+                    dynamics_dict=self._dynamics_dict,
+                    resets_dict=self._resets_dict,
+                    guards_dict=self._guards_dict,
+                    post_event_state=new_state,
+                )
+                self._current_state = new_state
+                self._current_cov = salt @ self._current_cov @ salt.T
+                break
 
         return self._current_state, self._current_cov
