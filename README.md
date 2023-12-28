@@ -1,4 +1,6 @@
-# salted-kalman-filter
+# hyrbid-tools
+
+## Salted Kalman Filter
 If you use this code for your academic research, please cite
 ```
 @article{paper:kong-skf-2021,
