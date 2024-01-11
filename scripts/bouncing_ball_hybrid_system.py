@@ -16,12 +16,13 @@ def symbolic_dynamics():
     Returns (Tuple[Dict, Dict]): dynamic functions in a nested dict and reset functions in a nested dict.
     TODO: FILL IN WITH BOUNCING BALL. Modes are {'up','down'}. e is coefficient of resititution.
     """
-    q, q_dot, e, u, dt = sp.symbols("q q_dot e u dt")
+    q, q_dot, e, g, u, dt = sp.symbols("q q_dot e g u dt")
 
     """ Define the states and inputs. """
-    inputs = Matrix([u])  # note inputs don't matter
-    states = Matrix([x1, x2])
+    inputs = Matrix([u])
+    states = Matrix([q, q_dot])
 
+    """ FILL IN EVERYTHING ELSE BELOW HERE!! """
     """ Defining the dynamics of the system. """
     fI = Matrix([1, -1])
     fJ = Matrix([1, 1])
@@ -155,22 +156,3 @@ plt.plot(measurements[:,0],measurements[:,1],'r.',label='Measurements')
 plt.plot(filtered_states[:,0], filtered_states[:,1],'b--',label='Filtered states')
 plt.legend()
 plt.show()
-# start_time = time.time()
-# # def upward_cannon(t, y): return [y[1], -0.5]
-# upward_cannon = lambda t, y: np.array([y[1] , -0.5])
-# # def hit_ground(t, y): return y[0]
-# hit_ground = lambda t, y: y[0]
-# hit_ground.terminal = True
-# hit_ground.direction = -1
-
-# hit_air = lambda t, y: y[0]-1
-# hit_air.terminal = True
-# hit_air.direction = -1
-# sol = solve_ivp(upward_cannon, [0, 100], np.array([0, 10]), events=[hit_ground, hit_air])
-# current_time = 0
-# end_time = current_time + dt
-# # sol = solve_ivp(upward_cannon, [current_time, end_time], [0,10], events=hit_ground)
-# print("States: ", sol.y)
-# print("Times: ", sol.t)
-# print(time.time() - start_time)
-print("")

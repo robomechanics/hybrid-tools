@@ -154,22 +154,3 @@ plt.plot(measurements[:,0],measurements[:,1],'r.',label='Measurements')
 plt.plot(filtered_states[:,0], filtered_states[:,1],'b--',label='Filtered states')
 plt.legend()
 plt.show()
-# start_time = time.time()
-# # def upward_cannon(t, y): return [y[1], -0.5]
-# upward_cannon = lambda t, y: np.array([y[1] , -0.5])
-# # def hit_ground(t, y): return y[0]
-# hit_ground = lambda t, y: y[0]
-# hit_ground.terminal = True
-# hit_ground.direction = -1
-
-# hit_air = lambda t, y: y[0]-1
-# hit_air.terminal = True
-# hit_air.direction = -1
-# sol = solve_ivp(upward_cannon, [0, 100], np.array([0, 10]), events=[hit_ground, hit_air])
-# current_time = 0
-# end_time = current_time + dt
-# # sol = solve_ivp(upward_cannon, [current_time, end_time], [0,10], events=hit_ground)
-# print("States: ", sol.y)
-# print("Times: ", sol.t)
-# print(time.time() - start_time)
-print("")
