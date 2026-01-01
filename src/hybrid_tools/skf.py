@@ -1,15 +1,13 @@
-import sys
-import pathlib
 import numpy as np
 from scipy.integrate import solve_ivp
 
-sys.path.append(str(pathlib.Path(__file__).parent.parent))
-from src.hybrid_helper_functions import (
-    solve_ivp_dynamics_func,
-    solve_ivp_guard_funcs,
-    solve_ivp_extract_hybrid_events,
+from .hybrid_helper_functions import (
     compute_saltation_matrix,
+    solve_ivp_dynamics_func,
+    solve_ivp_extract_hybrid_events,
+    solve_ivp_guard_funcs,
 )
+
 
 class SKF:
     def __init__(
@@ -45,6 +43,10 @@ class SKF:
 
         self._n_states = np.shape(self._current_state)[0]
 
+    @property
+    def current_mode(self):
+        return self._current_mode
+
     def predict(self, current_time, inputs):
         """
         Prior update.
@@ -77,7 +79,7 @@ class SKF:
 
         while new_mode is not None:
             """Apply reset."""
-            current_state = self._resets_dict[self._current_mode][new_mode]['r'](
+            current_state = self._resets_dict[self._current_mode][new_mode]["r"](
                 hybrid_event_state, inputs, self._dt, self._parameters
             ).reshape(np.shape(hybrid_event_state))
 
@@ -138,12 +140,17 @@ class SKF:
             current_state[idx] = sol.y[idx][-1]
 
         """ Propagate the rest of the covariance. """
-        dynamics_cov = self._dynamics_dict[self._current_mode]["A_disc"](
+        dynamics_jacobian = self._dynamics_dict[self._current_mode]["A_disc"](
             current_start_state, inputs, sol.t[-1] - sol.t[0], self._parameters
         )
+        input_jacobian = self._dynamics_dict[self._current_mode]["B_disc"](
+            current_start_state, inputs, sol.t[-1] - sol.t[0], self._parameters
+        )
+        process_cov = (
+            input_jacobian @ self._noise_matrices_dict[self._current_mode]["W"] @ input_jacobian.T
+        )
         self._current_cov = (
-            dynamics_cov @ self._current_cov @ dynamics_cov.T
-            + self._noise_matrices_dict[self._current_mode]["W"]
+            dynamics_jacobian @ self._current_cov @ dynamics_jacobian.T + process_cov
         )
 
         self._current_state = current_state
@@ -155,25 +162,25 @@ class SKF:
         When a new measurement comes in, update the covariance.
         If updated state is pulled into new mode, then apply saltation matrix and reset.
         """
-        C = self._dynamics_dict[self._current_mode]['C'](
-                self._current_state,
-                self._parameters,
-            )
-        V = self._noise_matrices_dict[self._current_mode]['V']
-        K = self._current_cov@C.T@np.linalg.inv(C@self._current_cov@C.T + V)
+        C = self._dynamics_dict[self._current_mode]["C"](
+            self._current_state,
+            self._parameters,
+        )
+        V = self._noise_matrices_dict[self._current_mode]["V"]
+        K = self._current_cov @ C.T @ np.linalg.inv(C @ self._current_cov @ C.T + V)
 
         """ Measurement update. """
-        measurement_est = self._dynamics_dict[self._current_mode]['y'](
-                self._current_state,
-                self._parameters,
-            ).flatten()
-        C = self._dynamics_dict[self._current_mode]['C'](
-                self._current_state,
-                self._parameters,
-            )
+        measurement_est = self._dynamics_dict[self._current_mode]["y"](
+            self._current_state,
+            self._parameters,
+        ).flatten()
+        C = self._dynamics_dict[self._current_mode]["C"](
+            self._current_state,
+            self._parameters,
+        )
         residual = measurement - measurement_est
-        self._current_state = self._current_state + K@residual
-        self._current_cov = self._current_cov - K@C@self._current_cov
+        self._current_state = self._current_state + K @ residual
+        self._current_cov = self._current_cov - K @ C @ self._current_cov
 
         """ Check guard conditions. If any guard is has been reached, then apply hybrid posterior update. """
         current_guards, possible_modes = solve_ivp_guard_funcs(
@@ -182,10 +189,9 @@ class SKF:
         for guard_idx in range(len(current_guards)):
             """TODO: Add in time component. """
             if current_guards[guard_idx](current_time, self._current_state) < 0:
-                print("Debug: Applying posterior hybrid update.")
                 new_mode = possible_modes[guard_idx]
                 """Apply reset."""
-                new_state = self._resets_dict[self._current_mode][new_mode]['r'](
+                new_state = self._resets_dict[self._current_mode][new_mode]["r"](
                     self._current_state, current_input, self._dt, self._parameters
                 ).reshape(np.shape(self._current_state))
 
@@ -207,3 +213,11 @@ class SKF:
                 break
 
         return self._current_state, self._current_cov
+
+    @property
+    def current_state(self):
+        return self._current_state
+
+    @property
+    def current_cov(self):
+        return self._current_cov

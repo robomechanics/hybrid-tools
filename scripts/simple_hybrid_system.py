@@ -1,41 +1,38 @@
-import sys
-import pathlib
-import time
+import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
 from sympy.matrices import Matrix
-from scipy.integrate import solve_ivp
-import matplotlib.pyplot as plt
 
-sys.path.append(str(pathlib.Path(__file__).parent.parent))
-from src.skf import SKF
-from src.hybrid_simulator import HybridSimulator
+from hybrid_tools import SKF, HybridSimulator
+
 
 def symbolic_dynamics():
     """
     Returns (Tuple[Dict, Dict]): dynamic functions in a nested dict and reset functions in a nested dict.
     """
-    x1, x2, u, dt = sp.symbols("x1 x2 u dt")
+    x1, x2, u1, u2, dt = sp.symbols("x1 x2 u1 u2 dt")
 
     """ Define the states and inputs. """
-    inputs = Matrix([u])  # note inputs don't matter
+    inputs = Matrix([u1, u2])  # note inputs also specify how process noise can be introduced.
     states = Matrix([x1, x2])
 
     """ Defining the dynamics of the system. """
-    fI = Matrix([1, -1])
-    fJ = Matrix([1, 1])
-    
+    fI = Matrix([1 + u1, -1 + u2])
+    fJ = Matrix([1 + u1, 1 + u2])
+
     """ Define the measurements of the system. """
     yI = Matrix([x1, x2])
     yJ = Matrix([x1, x2])
 
     """ Discretize the dynamics usp.sing euler integration. """
     fI_disc = states + fI * dt
-    fJ_disc = states + fI * dt
+    fJ_disc = states + fJ * dt
 
     """ Take the jacobian with respect to states and inputs. """
     AI_disc = fI_disc.jacobian(states)
     AJ_disc = fJ_disc.jacobian(states)
+    BI_disc = fI_disc.jacobian(inputs)
+    BJ_disc = fJ_disc.jacobian(inputs)
 
     """ Take the jacobian of the measurements with respect to the states. """
     CI = yI.jacobian(states)
@@ -64,9 +61,11 @@ def symbolic_dynamics():
 
     fI_func = sp.lambdify((states, inputs, dt, parameters), fI)
     AI_disc_func = sp.lambdify((states, inputs, dt, parameters), AI_disc)
+    BI_disc_func = sp.lambdify((states, inputs, dt, parameters), BI_disc)
 
     fJ_func = sp.lambdify((states, inputs, dt, parameters), fJ)
     AJ_disc_func = sp.lambdify((states, inputs, dt, parameters), AJ_disc)
+    BJ_disc_func = sp.lambdify((states, inputs, dt, parameters), BJ_disc)
 
     yI_func = sp.lambdify((states, parameters), yI)
     CI_func = sp.lambdify((states, parameters), CI)
@@ -75,8 +74,20 @@ def symbolic_dynamics():
     CJ_func = sp.lambdify((states, parameters), CJ)
 
     dynamics = {
-        "I": {"f_cont": fI_func, "A_disc": AI_disc_func, "y": yI_func, "C": CI_func},
-        "J": {"f_cont": fJ_func, "A_disc": AJ_disc_func, "y": yJ_func, "C": CJ_func},
+        "I": {
+            "f_cont": fI_func,
+            "A_disc": AI_disc_func,
+            "B_disc": BI_disc_func,
+            "y": yI_func,
+            "C": CI_func,
+        },
+        "J": {
+            "f_cont": fJ_func,
+            "A_disc": AJ_disc_func,
+            "B_disc": BJ_disc_func,
+            "y": yJ_func,
+            "C": CJ_func,
+        },
     }
     resets = {"I": {"J": {"r": rIJ_func, "R": RIJ_func}}}
     guards = {"I": {"J": {"g": gIJ_func, "G": GIJ_func}}}
@@ -97,7 +108,7 @@ noise_matrices = {
 
 """ Initialize states and covariance. """
 mean_init_state = np.array([-2.5, 0])
-mean_init_cov = 0.1*np.eye(n_states)
+mean_init_cov = 0.1 * np.eye(n_states)
 init_mode = "I"  # Modes are {I, J}
 
 """ Define timesteps. """
@@ -116,11 +127,11 @@ skf = SKF(
     dynamics=dynamics,
     resets=resets,
     guards=guards,
-    parameters=parameters
+    parameters=parameters,
 )
 
 """ Initialize simulator. """
-actual_init_state = np.random.multivariate_normal(mean_init_state,mean_init_cov)
+actual_init_state = np.random.multivariate_normal(mean_init_state, mean_init_cov)
 hybrid_simulator = HybridSimulator(
     init_state=actual_init_state,
     init_mode=init_mode,
@@ -129,28 +140,30 @@ hybrid_simulator = HybridSimulator(
     dynamics=dynamics,
     resets=resets,
     guards=guards,
-    parameters=parameters
+    parameters=parameters,
 )
 
 n_simulate_timesteps = 50
-timesteps = np.arange(0.0,n_simulate_timesteps*dt,dt)
-measurements = np.zeros((n_simulate_timesteps-1,n_states))
-actual_states = np.zeros((n_simulate_timesteps,n_states))
-filtered_states = np.zeros((n_simulate_timesteps,n_states))
+timesteps = np.arange(0.0, n_simulate_timesteps * dt, dt)
+measurements = np.zeros((n_simulate_timesteps - 1, n_states))
+actual_states = np.zeros((n_simulate_timesteps, n_states))
+filtered_states = np.zeros((n_simulate_timesteps, n_states))
 
-actual_states[0,:] = hybrid_simulator.get_state()
-filtered_states[0,:] = mean_init_state
+actual_states[0, :] = hybrid_simulator.get_state()
+filtered_states[0, :] = mean_init_state
 
-zero_input = np.array([0.0])
-for time_idx in range(1,n_simulate_timesteps):
-    hybrid_simulator.simulate_timestep(0,np.array([0]))
-    actual_states[time_idx,:] = hybrid_simulator.get_state()
-    measurements[time_idx-1,:] = hybrid_simulator.get_measurement(measurement_noise_flag=True)
-    skf.predict(timesteps[time_idx],zero_input)
-    filtered_states[time_idx,:], current_cov = skf.update(timesteps[time_idx],zero_input,measurements[time_idx-1,:])
+zero_input = np.array([0.0, 0.0])
+for time_idx in range(1, n_simulate_timesteps):
+    hybrid_simulator.simulate_timestep(0, zero_input)
+    actual_states[time_idx, :] = hybrid_simulator.get_state()
+    measurements[time_idx - 1, :] = hybrid_simulator.get_measurement(measurement_noise_flag=True)
+    skf.predict(timesteps[time_idx], zero_input)
+    filtered_states[time_idx, :], current_cov = skf.update(
+        timesteps[time_idx], zero_input, measurements[time_idx - 1, :]
+    )
 
-plt.plot(actual_states[:,0],actual_states[:,1],'k-',label='Actual states')
-plt.plot(measurements[:,0],measurements[:,1],'r.',label='Measurements')
-plt.plot(filtered_states[:,0], filtered_states[:,1],'b--',label='Filtered states')
+plt.plot(actual_states[:, 0], actual_states[:, 1], "k-", label="Actual states")
+plt.plot(measurements[:, 0], measurements[:, 1], "r.", label="Measurements")
+plt.plot(filtered_states[:, 0], filtered_states[:, 1], "b--", label="Filtered states")
 plt.legend()
 plt.show()
