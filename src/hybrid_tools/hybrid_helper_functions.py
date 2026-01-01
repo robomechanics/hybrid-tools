@@ -39,8 +39,6 @@ def solve_ivp_guard_funcs(guards_dict, mode, inputs, dt, parameters):
             def guard(t, states, v=val):
                 return v["g"](states, inputs, dt, parameters).flatten()[0]
 
-            guard.terminal = True
-            guard.direction = -1
             guards.append(guard)
             new_modes.append(key)
     return guards, new_modes

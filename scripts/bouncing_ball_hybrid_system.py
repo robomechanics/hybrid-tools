@@ -127,7 +127,7 @@ dynamics, resets, guards = symbolic_dynamics()
 n_states = 2
 n_inputs = 1
 W_global = 0.01 * np.eye(n_inputs)
-V_global = 0.0025 * np.eye(n_states)
+V_global = 0.01 * np.eye(n_states)
 noise_matrices = {
     "I": {"W": W_global, "V": V_global},
     "J": {"W": W_global, "V": V_global},
@@ -197,10 +197,8 @@ for time_idx in range(1, n_simulate_timesteps):
     actual_states[time_idx, :] = hybrid_simulator.get_state()
     measurements[time_idx - 1, :] = hybrid_simulator.get_measurement(measurement_noise_flag=True)
     skf.predict(timesteps[time_idx], zero_input)
-    print(f"idx: {time_idx}, Prior mode: ", skf._current_mode)
     if time_idx % posterior_update_frequency == 0:
         _, _ = skf.update(timesteps[time_idx], zero_input, measurements[time_idx - 1, :])
-        print(f"idx: {time_idx}, Posterior: ", skf._current_mode)
     filtered_states[time_idx, :] = skf.current_state
     mode_list.append(hybrid_simulator.current_mode)
 
