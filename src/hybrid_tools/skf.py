@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Tuple
+from typing import Tuple
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -9,6 +9,7 @@ from .hybrid_helper_functions import (
     solve_ivp_extract_hybrid_events,
     solve_ivp_guard_funcs,
 )
+from .types import HybridDynamicalSystem
 
 
 class SKF:
@@ -25,11 +26,8 @@ class SKF:
         init_mode: str,
         init_cov: np.ndarray,
         dt: float,
-        noise_matrices: Dict[str, Dict[str, np.ndarray]],
-        dynamics: Dict[str, Dict[str, Callable]],
-        resets: Dict[str, Dict[str, Dict[str, Callable]]],
-        guards: Dict[str, Dict[str, Callable]],
         parameters: np.ndarray,
+        hybrid_system: HybridDynamicalSystem,
     ) -> None:
         """Initialize the Saltation Kalman Filter.
 
@@ -38,22 +36,15 @@ class SKF:
             init_mode: Initial discrete mode identifier.
             init_cov: Initial state covariance matrix.
             dt: Time step for discrete updates.
-            noise_matrices: Process ('W') and measurement ('V') noise covariance matrices per mode.
-            dynamics: Continuous and discrete dynamics functions per mode (A_disc, B_disc, C, y).
-            resets: Reset maps for state transitions between modes.
-            guards: Guard functions defining mode transition conditions.
             parameters: Additional system parameters.
+            hybrid_system: Complete hybrid system specification including noise matrices.
         """
+        self._hybrid_system = hybrid_system
         self._current_state = init_state
         self._current_cov = init_cov
         self._current_mode = init_mode
         self._dt = dt
-        self._noise_matrices_dict = noise_matrices
-        self._dynamics_dict = dynamics
-        self._resets_dict = resets
-        self._guards_dict = guards
         self._parameters = parameters
-
         self._n_states = np.shape(self._current_state)[0]
 
     @property
@@ -78,15 +69,13 @@ class SKF:
             current_mode: Current discrete mode.
             dt: Time step for propagation.
         """
-        dynamics_cov = self._dynamics_dict[current_mode]["A_disc"](
+        dynamics_cov = self._hybrid_system.dynamics[current_mode].A_disc(
             current_state, inputs, dt, self._parameters
         )
-        input_jacobian = self._dynamics_dict[current_mode]["B_disc"](
+        input_jacobian = self._hybrid_system.dynamics[current_mode].B_disc(
             current_state, inputs, dt, self._parameters
         )
-        process_cov = (
-            input_jacobian @ self._noise_matrices_dict[current_mode]["W"] @ input_jacobian.T
-        )
+        process_cov = input_jacobian @ self._hybrid_system.noises[current_mode].W @ input_jacobian.T
         self._current_cov = dynamics_cov @ self._current_cov @ dynamics_cov.T + process_cov
 
     def predict(self, current_time: float, inputs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -107,10 +96,10 @@ class SKF:
 
         # Integrate for dt
         current_dynamics = solve_ivp_dynamics_func(
-            self._dynamics_dict, self._current_mode, inputs, self._dt, self._parameters
+            self._hybrid_system.dynamics, self._current_mode, inputs, self._dt, self._parameters
         )
         current_guards, possible_modes = solve_ivp_guard_funcs(
-            self._guards_dict, self._current_mode, inputs, self._dt, self._parameters
+            self._hybrid_system.guards, self._current_mode, inputs, self._dt, self._parameters
         )
 
         current_start_state = self._current_state.copy()
@@ -131,9 +120,11 @@ class SKF:
 
         while new_mode is not None:
             # Apply reset
-            current_state = self._resets_dict[self._current_mode][new_mode]["r"](
-                hybrid_event_state, inputs, self._dt, self._parameters
-            ).reshape(np.shape(hybrid_event_state))
+            current_state = (
+                self._hybrid_system.resets[self._current_mode][new_mode]
+                .r(hybrid_event_state, inputs, self._dt, self._parameters)
+                .reshape(np.shape(hybrid_event_state))
+            )
 
             self._propagate_covariance_using_dynamics(
                 current_time=current_time,
@@ -150,9 +141,7 @@ class SKF:
                 parameters=self._parameters,
                 pre_mode=self._current_mode,
                 post_mode=new_mode,
-                dynamics_dict=self._dynamics_dict,
-                resets_dict=self._resets_dict,
-                guards_dict=self._guards_dict,
+                hybrid_system=self._hybrid_system,
                 post_event_state=current_state,
             )
             self._current_cov = salt @ self._current_cov @ salt.T
@@ -160,14 +149,14 @@ class SKF:
             # Update guard and simulate
             self._current_mode = new_mode
             current_dynamics = solve_ivp_dynamics_func(
-                self._dynamics_dict,
+                self._hybrid_system.dynamics,
                 self._current_mode,
                 inputs,
                 self._dt,
                 self._parameters,
             )
             current_guards, possible_modes = solve_ivp_guard_funcs(
-                self._guards_dict,
+                self._hybrid_system.guards,
                 self._current_mode,
                 inputs,
                 self._dt,
@@ -220,19 +209,23 @@ class SKF:
         Returns:
             Tuple of (updated_state, updated_covariance).
         """
-        C = self._dynamics_dict[self._current_mode]["C"](
+        C = self._hybrid_system.dynamics[self._current_mode].C(
             self._current_state,
             self._parameters,
         )
-        V = self._noise_matrices_dict[self._current_mode]["V"]
+        V = self._hybrid_system.noises[self._current_mode].V
         K = self._current_cov @ C.T @ np.linalg.inv(C @ self._current_cov @ C.T + V)
 
         # Measurement update
-        measurement_est = self._dynamics_dict[self._current_mode]["y"](
-            self._current_state,
-            self._parameters,
-        ).flatten()
-        C = self._dynamics_dict[self._current_mode]["C"](
+        measurement_est = (
+            self._hybrid_system.dynamics[self._current_mode]
+            .y(
+                self._current_state,
+                self._parameters,
+            )
+            .flatten()
+        )
+        C = self._hybrid_system.dynamics[self._current_mode].C(
             self._current_state,
             self._parameters,
         )
@@ -242,16 +235,22 @@ class SKF:
 
         # Check guard conditions. If any guard has been reached, apply hybrid posterior update
         current_guards, possible_modes = solve_ivp_guard_funcs(
-            self._guards_dict, self._current_mode, current_input, self._dt, self._parameters
+            self._hybrid_system.guards,
+            self._current_mode,
+            current_input,
+            self._dt,
+            self._parameters,
         )
         for guard_idx in range(len(current_guards)):
             # TODO: Add in time component
             if current_guards[guard_idx](current_time, self._current_state) < 0:
                 new_mode = possible_modes[guard_idx]
                 # Apply reset
-                new_state = self._resets_dict[self._current_mode][new_mode]["r"](
-                    self._current_state, current_input, self._dt, self._parameters
-                ).reshape(np.shape(self._current_state))
+                new_state = (
+                    self._hybrid_system.resets[self._current_mode][new_mode]
+                    .r(self._current_state, current_input, self._dt, self._parameters)
+                    .reshape(np.shape(self._current_state))
+                )
 
                 # Apply covariance updates: dynamics and saltation matrix
                 salt = compute_saltation_matrix(
@@ -261,9 +260,7 @@ class SKF:
                     parameters=self._parameters,
                     pre_mode=self._current_mode,
                     post_mode=new_mode,
-                    dynamics_dict=self._dynamics_dict,
-                    resets_dict=self._resets_dict,
-                    guards_dict=self._guards_dict,
+                    hybrid_system=self._hybrid_system,
                     post_event_state=new_state,
                 )
                 self._current_state = new_state

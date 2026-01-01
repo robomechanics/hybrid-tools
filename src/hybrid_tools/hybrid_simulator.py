@@ -1,5 +1,3 @@
-from typing import Callable, Dict
-
 import numpy as np
 from scipy.integrate import solve_ivp
 
@@ -8,6 +6,7 @@ from .hybrid_helper_functions import (
     solve_ivp_extract_hybrid_events,
     solve_ivp_guard_funcs,
 )
+from .types import HybridDynamicalSystem
 
 
 class HybridSimulator:
@@ -22,11 +21,8 @@ class HybridSimulator:
         init_state: np.ndarray,
         init_mode: str,
         dt: float,
-        noise_matrices: Dict[str, Dict[str, np.ndarray]],
-        dynamics: Dict[str, Dict[str, Callable]],
-        resets: Dict[str, Dict[str, Dict[str, Callable]]],
-        guards: Dict[str, Dict[str, Callable]],
         parameters: np.ndarray,
+        hybrid_system: HybridDynamicalSystem,
     ) -> None:
         """Initialize the hybrid system simulator.
 
@@ -34,20 +30,14 @@ class HybridSimulator:
             init_state: Initial state vector.
             init_mode: Initial discrete mode identifier.
             dt: Time step for simulation.
-            noise_matrices: Process ('W') and measurement ('V') noise covariance matrices per mode.
-            dynamics: Continuous dynamics and measurement functions per mode.
-            resets: Reset maps for state transitions between modes.
-            guards: Guard functions defining mode transition conditions.
             parameters: Additional system parameters.
+            hybrid_system: Complete hybrid system specification including noise matrices.
         """
+        self._hybrid_system = hybrid_system
         self._current_state = init_state
         self._current_mode = init_mode
         self._dt = dt
-        self._dynamics_dict = dynamics
-        self._resets_dict = resets
-        self._guards_dict = guards
         self._parameters = parameters
-        self._noise_matrices = noise_matrices
         self._n_states = np.shape(self._current_state)[0]
 
     def simulate_timestep(self, current_time: float, inputs: np.ndarray) -> None:
@@ -65,13 +55,13 @@ class HybridSimulator:
         # Get noise parameters
         process_gaussian_noise = {
             "mean": np.zeros(
-                self._noise_matrices[self._current_mode]["W"].shape[0]
+                self._hybrid_system.noises[self._current_mode].W.shape[0]
             ),  # TODO: This should be member variable
-            "cov": self._noise_matrices[self._current_mode]["W"],
+            "cov": self._hybrid_system.noises[self._current_mode].W,
         }
         # Integrate for dt
         current_dynamics = solve_ivp_dynamics_func(
-            self._dynamics_dict,
+            self._hybrid_system.dynamics,
             self._current_mode,
             inputs,
             self._dt,
@@ -79,7 +69,7 @@ class HybridSimulator:
             process_gaussian_noise=process_gaussian_noise,
         )
         current_guards, possible_modes = solve_ivp_guard_funcs(
-            self._guards_dict, self._current_mode, inputs, self._dt, self._parameters
+            self._hybrid_system.guards, self._current_mode, inputs, self._dt, self._parameters
         )
 
         sol = solve_ivp(
@@ -99,21 +89,23 @@ class HybridSimulator:
 
         while new_mode is not None:
             # Apply reset
-            current_state = self._resets_dict[self._current_mode][new_mode]["r"](
-                hybrid_event_state, inputs, self._dt, self._parameters
-            ).reshape(np.shape(hybrid_event_state))
+            current_state = (
+                self._hybrid_system.resets[self._current_mode][new_mode]
+                .r(hybrid_event_state, inputs, self._dt, self._parameters)
+                .reshape(np.shape(hybrid_event_state))
+            )
 
             # Update guard and simulate
             self._current_mode = new_mode
             current_dynamics = solve_ivp_dynamics_func(
-                self._dynamics_dict,
+                self._hybrid_system.dynamics,
                 self._current_mode,
                 inputs,
                 self._dt,
                 self._parameters,
             )
             current_guards, possible_modes = solve_ivp_guard_funcs(
-                self._guards_dict,
+                self._hybrid_system.guards,
                 self._current_mode,
                 inputs,
                 self._dt,
@@ -147,16 +139,20 @@ class HybridSimulator:
         Returns:
             Measurement vector, optionally with added noise.
         """
-        measurement = self._dynamics_dict[self._current_mode]["y"](
-            self._current_state,
-            self._parameters,
-        ).flatten()
+        measurement = (
+            self._hybrid_system.dynamics[self._current_mode]
+            .y(
+                self._current_state,
+                self._parameters,
+            )
+            .flatten()
+        )
         if not measurement_noise_flag:
             return measurement
         else:
             measurement_gaussian_noise = {
                 "mean": np.zeros(np.shape(measurement)[0]),
-                "cov": self._noise_matrices[self._current_mode]["V"],
+                "cov": self._hybrid_system.noises[self._current_mode].V,
             }
             return measurement + np.random.multivariate_normal(
                 measurement_gaussian_noise["mean"], measurement_gaussian_noise["cov"]

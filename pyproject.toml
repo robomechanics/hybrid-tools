@@ -32,6 +32,7 @@ dependencies = [
     "scipy>=1.7.0",
     "sympy>=1.9",
     "matplotlib>=3.3.0",
+    "graphviz>=0.20.3",
 ]
 
 [project.optional-dependencies]

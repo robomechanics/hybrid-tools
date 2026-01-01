@@ -38,11 +38,36 @@ For detailed installation instructions and development setup, see [INSTALL.md](I
 ## Quick Start
 
 ```python
-from hybrid_tools import SKF, HybridSimulator
+from hybrid_tools import (
+    SKF,
+    HybridSimulator,
+    HybridDynamicalSystem,
+    ModeDynamics,
+    ModeReset,
+    ModeGuard,
+    ModeNoise,
+    create_dynamics,
+    create_resets,
+    create_guards,
+)
 import numpy as np
 
-# Define your hybrid system dynamics, guards, and resets
-# (see examples in scripts/ directory)
+# Define your hybrid system components
+# (see docs/HybridDynamicalSystem.md for detailed guide)
+
+# Create dynamics, resets, guards, and noises
+dynamics = create_dynamics([...])
+resets = create_resets([...])
+guards = create_guards([...])
+noises = {...}
+
+# Bundle into HybridDynamicalSystem (automatically validated)
+hybrid_system = HybridDynamicalSystem(
+    dynamics=dynamics,
+    resets=resets,
+    guards=guards,
+    noises=noises,
+)
 
 # Initialize the Salted Kalman Filter
 skf = SKF(
@@ -50,17 +75,16 @@ skf = SKF(
     init_mode="mode_name",
     init_cov=initial_covariance,
     dt=timestep,
-    noise_matrices=noise_dict,
-    dynamics=dynamics_dict,
-    resets=resets_dict,
-    guards=guards_dict,
-    parameters=params
+    parameters=params,
+    hybrid_system=hybrid_system,
 )
 
 # Run prediction and update steps
 predicted_state, predicted_cov = skf.predict(current_time, inputs)
 filtered_state, filtered_cov = skf.update(current_time, inputs, measurement)
 ```
+
+**📖 For a complete guide on defining hybrid systems, see [HybridDynamicalSystem Documentation](docs/HybridDynamicalSystem.md)**
 
 ## Examples
 

@@ -1,16 +1,18 @@
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from .types import Dynamics, Guards, HybridDynamicalSystem
+
 
 def solve_ivp_dynamics_func(
-    dynamics_dict: Dict[str, Dict[str, Callable]],
+    dynamics_dict: Dynamics,
     mode: str,
     inputs: np.ndarray,
     dt: float,
     parameters: np.ndarray,
     process_gaussian_noise: Optional[Dict[str, np.ndarray]] = None,
-) -> Callable[[float, np.ndarray], np.ndarray]:
+):
     """Create dynamics function compatible with scipy.integrate.solve_ivp.
 
     Args:
@@ -36,22 +38,26 @@ def solve_ivp_dynamics_func(
                 f"Process noise size {process_noise.size} does not match input size {inputs.size}"
             )
         noisy_inputs = inputs + process_noise
-        return lambda t, states: dynamics_dict[mode]["f_cont"](
-            states, noisy_inputs, dt, parameters
-        ).reshape(np.shape(states))
+        return (
+            lambda t, states: dynamics_dict[mode]
+            .f_cont(states, noisy_inputs, dt, parameters)
+            .reshape(np.shape(states))
+        )
     else:
-        return lambda t, states: dynamics_dict[mode]["f_cont"](
-            states, inputs, dt, parameters
-        ).reshape(np.shape(states))
+        return (
+            lambda t, states: dynamics_dict[mode]
+            .f_cont(states, inputs, dt, parameters)
+            .reshape(np.shape(states))
+        )
 
 
 def solve_ivp_guard_funcs(
-    guards_dict: Dict[str, Dict[str, Dict[str, Callable]]],
+    guards_dict: Guards,
     mode: str,
     inputs: np.ndarray,
     dt: float,
     parameters: np.ndarray,
-) -> Tuple[List[Callable], List[str]]:
+) -> Tuple[List, List[str]]:
     """Create guard functions compatible with scipy.integrate.solve_ivp events.
 
     Args:
@@ -64,14 +70,14 @@ def solve_ivp_guard_funcs(
     Returns:
         Tuple of (guard_functions, possible_target_modes).
     """
-    guards: List[Callable] = []
+    guards: List = []
     new_modes: List[str] = []
     if mode in guards_dict:
         for key, val in guards_dict[mode].items():
             # Fix closure issue by using default argument to capture val
             # Flatten the result to return a scalar for solve_ivp
-            def guard(t: float, states: np.ndarray, v: Dict[str, Callable] = val) -> float:
-                return v["g"](states, inputs, dt, parameters).flatten()[0]
+            def guard(t: float, states: np.ndarray, v=val) -> float:
+                return v.g(states, inputs, dt, parameters).flatten()[0]
 
             guards.append(guard)
             new_modes.append(key)
@@ -108,9 +114,7 @@ def compute_saltation_matrix(
     parameters: np.ndarray,
     pre_mode: str,
     post_mode: str,
-    dynamics_dict: Dict[str, Dict[str, Callable]],
-    resets_dict: Dict[str, Dict[str, Dict[str, Callable]]],
-    guards_dict: Dict[str, Dict[str, Dict[str, Callable]]],
+    hybrid_system: HybridDynamicalSystem,
     post_event_state: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Compute saltation matrix for hybrid system mode transition.
@@ -125,9 +129,7 @@ def compute_saltation_matrix(
         parameters: System parameters.
         pre_mode: Mode before transition.
         post_mode: Mode after transition.
-        dynamics_dict: Dictionary of dynamics functions per mode.
-        resets_dict: Dictionary of reset maps per transition.
-        guards_dict: Dictionary of guard functions per transition.
+        hybrid_system: Complete hybrid system specification.
         post_event_state: Optional state after reset. Computed if not provided.
 
     Returns:
@@ -138,17 +140,23 @@ def compute_saltation_matrix(
     """
     if post_event_state is None:
         # Compute reset if post event state is not given
-        post_event_state = resets_dict[pre_mode][post_mode]["r"](
-            pre_event_state, inputs, dt, parameters
-        ).reshape(np.shape(pre_event_state))
+        post_event_state = (
+            hybrid_system.resets[pre_mode][post_mode]
+            .r(pre_event_state, inputs, dt, parameters)
+            .reshape(np.shape(pre_event_state))
+        )
 
-    DxR = resets_dict[pre_mode][post_mode]["R"](pre_event_state, inputs, dt, parameters)
-    DxG = guards_dict[pre_mode][post_mode]["G"](pre_event_state, inputs, dt, parameters)
-    f_pre = dynamics_dict[pre_mode]["f_cont"](pre_event_state, inputs, dt, parameters).reshape(
-        np.shape(pre_event_state)
+    DxR = hybrid_system.resets[pre_mode][post_mode].R(pre_event_state, inputs, dt, parameters)
+    DxG = hybrid_system.guards[pre_mode][post_mode].G(pre_event_state, inputs, dt, parameters)
+    f_pre = (
+        hybrid_system.dynamics[pre_mode]
+        .f_cont(pre_event_state, inputs, dt, parameters)
+        .reshape(np.shape(pre_event_state))
     )
-    f_post = dynamics_dict[post_mode]["f_cont"](post_event_state, inputs, dt, parameters).reshape(
-        np.shape(pre_event_state)
+    f_post = (
+        hybrid_system.dynamics[post_mode]
+        .f_cont(post_event_state, inputs, dt, parameters)
+        .reshape(np.shape(pre_event_state))
     )
 
     salt = DxR + np.outer((f_post - DxR @ f_pre), DxG) / (DxG @ f_pre)

@@ -3,7 +3,18 @@ import numpy as np
 import sympy as sp
 from sympy.matrices import Matrix
 
-from hybrid_tools import SKF, HybridSimulator
+from hybrid_tools import (
+    SKF,
+    HybridDynamicalSystem,
+    HybridSimulator,
+    ModeDynamics,
+    ModeGuard,
+    ModeNoise,
+    ModeReset,
+    create_dynamics,
+    create_guards,
+    create_resets,
+)
 
 
 def symbolic_dynamics():
@@ -73,40 +84,65 @@ def symbolic_dynamics():
     yJ_func = sp.lambdify((states, parameters), yJ)
     CJ_func = sp.lambdify((states, parameters), CJ)
 
-    dynamics = {
-        "I": {
-            "f_cont": fI_func,
-            "A_disc": AI_disc_func,
-            "B_disc": BI_disc_func,
-            "y": yI_func,
-            "C": CI_func,
-        },
-        "J": {
-            "f_cont": fJ_func,
-            "A_disc": AJ_disc_func,
-            "B_disc": BJ_disc_func,
-            "y": yJ_func,
-            "C": CJ_func,
-        },
+    dynamics = create_dynamics(
+        [
+            (
+                "I",
+                ModeDynamics(
+                    f_cont=fI_func,
+                    A_disc=AI_disc_func,
+                    B_disc=BI_disc_func,
+                    y=yI_func,
+                    C=CI_func,
+                ),
+            ),
+            (
+                "J",
+                ModeDynamics(
+                    f_cont=fJ_func,
+                    A_disc=AJ_disc_func,
+                    B_disc=BJ_disc_func,
+                    y=yJ_func,
+                    C=CJ_func,
+                ),
+            ),
+        ]
+    )
+
+    resets = create_resets(
+        [
+            ("I", "J", ModeReset(r=rIJ_func, R=RIJ_func)),
+        ]
+    )
+
+    guards = create_guards(
+        [
+            ("I", "J", ModeGuard(g=gIJ_func, G=GIJ_func)),
+        ]
+    )
+
+    # Define noise matrices
+    n_states = 2
+    W_global = 0.01 * np.eye(n_states)
+    V_global = 0.025 * np.eye(n_states)
+    noises = {
+        "I": ModeNoise(W=W_global, V=V_global),
+        "J": ModeNoise(W=W_global, V=V_global),
     }
-    resets = {"I": {"J": {"r": rIJ_func, "R": RIJ_func}}}
-    guards = {"I": {"J": {"g": gIJ_func, "G": GIJ_func}}}
-    return dynamics, resets, guards
+
+    return HybridDynamicalSystem(
+        dynamics=dynamics,
+        resets=resets,
+        guards=guards,
+        noises=noises,
+    )
 
 
 """ Define dynamics and resets. """
-dynamics, resets, guards = symbolic_dynamics()
-
-""" Define noise matrices. """
-n_states = 2
-W_global = 0.01 * np.eye(n_states)
-V_global = 0.025 * np.eye(n_states)
-noise_matrices = {
-    "I": {"W": W_global, "V": V_global},
-    "J": {"W": W_global, "V": V_global},
-}
+hybrid_system = symbolic_dynamics()
 
 """ Initialize states and covariance. """
+n_states = 2
 mean_init_state = np.array([-2.5, 0])
 mean_init_cov = 0.1 * np.eye(n_states)
 init_mode = "I"  # Modes are {I, J}
@@ -123,11 +159,8 @@ skf = SKF(
     init_mode=init_mode,
     init_cov=mean_init_cov,
     dt=dt,
-    noise_matrices=noise_matrices,
-    dynamics=dynamics,
-    resets=resets,
-    guards=guards,
     parameters=parameters,
+    hybrid_system=hybrid_system,
 )
 
 """ Initialize simulator. """
@@ -136,11 +169,8 @@ hybrid_simulator = HybridSimulator(
     init_state=actual_init_state,
     init_mode=init_mode,
     dt=dt,
-    noise_matrices=noise_matrices,
-    dynamics=dynamics,
-    resets=resets,
-    guards=guards,
     parameters=parameters,
+    hybrid_system=hybrid_system,
 )
 
 n_simulate_timesteps = 50

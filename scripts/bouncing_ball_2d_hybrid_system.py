@@ -3,7 +3,18 @@ import numpy as np
 import sympy as sp
 from sympy.matrices import Matrix
 
-from hybrid_tools import SKF, HybridSimulator
+from hybrid_tools import (
+    SKF,
+    HybridDynamicalSystem,
+    HybridSimulator,
+    ModeDynamics,
+    ModeGuard,
+    ModeNoise,
+    ModeReset,
+    create_dynamics,
+    create_guards,
+    create_resets,
+)
 
 
 def symbolic_dynamics():
@@ -98,48 +109,75 @@ def symbolic_dynamics():
     yJ_func = sp.lambdify((states, parameters), yJ)
     CJ_func = sp.lambdify((states, parameters), CJ)
 
-    dynamics = {
-        "I": {
-            "f_cont": fI_func,
-            "A_disc": AI_disc_func,
-            "B_disc": BI_disc_func,
-            "y": yI_func,
-            "C": CI_func,
-        },
-        "J": {
-            "f_cont": fJ_func,
-            "A_disc": AJ_disc_func,
-            "B_disc": BJ_disc_func,
-            "y": yJ_func,
-            "C": CJ_func,
-        },
+    dynamics = create_dynamics(
+        [
+            (
+                "I",
+                ModeDynamics(
+                    f_cont=fI_func,
+                    A_disc=AI_disc_func,
+                    B_disc=BI_disc_func,
+                    y=yI_func,
+                    C=CI_func,
+                ),
+            ),
+            (
+                "J",
+                ModeDynamics(
+                    f_cont=fJ_func,
+                    A_disc=AJ_disc_func,
+                    B_disc=BJ_disc_func,
+                    y=yJ_func,
+                    C=CJ_func,
+                ),
+            ),
+        ]
+    )
+
+    resets = create_resets(
+        [
+            ("I", "J", ModeReset(r=rIJ_func, R=RIJ_func)),
+            ("J", "I", ModeReset(r=rJI_func, R=RJI_func)),
+        ]
+    )
+
+    guards = create_guards(
+        [
+            ("I", "J", ModeGuard(g=gIJ_func, G=GIJ_func)),
+            ("J", "I", ModeGuard(g=gJI_func, G=GJI_func)),
+        ]
+    )
+
+    # Define noise matrices
+    n_states = 4
+    n_inputs = 2
+    W_global = 0.01 * np.eye(n_inputs)
+    V_global = 0.01 * np.eye(n_states)
+    noises = {
+        "I": ModeNoise(W=W_global, V=V_global),
+        "J": ModeNoise(W=W_global, V=V_global),
     }
-    resets = {
-        "I": {"J": {"r": rIJ_func, "R": RIJ_func}},
-        "J": {"I": {"r": rJI_func, "R": RJI_func}},
-    }
-    guards = {
-        "I": {"J": {"g": gIJ_func, "G": GIJ_func}},
-        "J": {"I": {"g": gJI_func, "G": GJI_func}},
-    }
-    return dynamics, resets, guards
+
+    return HybridDynamicalSystem(
+        dynamics=dynamics,
+        resets=resets,
+        guards=guards,
+        noises=noises,
+    )
 
 
 """ Define dynamics and resets. """
-dynamics, resets, guards = symbolic_dynamics()
+hybrid_system = symbolic_dynamics()
 
-""" Define noise matrices. """
-n_states = 4
-n_inputs = 2
-W_global = 0.01 * np.eye(n_inputs)
-V_global = 0.01 * np.eye(n_states)
-noise_matrices = {
-    "I": {"W": W_global, "V": V_global},
-    "J": {"W": W_global, "V": V_global},
-}
+""" Draw mode transition graph. """
+try:
+    hybrid_system.draw_mode_graph("bouncing_ball_2d_mode_graph.png")
+except ImportError as e:
+    print(f"Skipping mode graph generation: {e}")
 
 """ Initialize states and covariance. """
 # Start ball at position (0, 2.5) with initial horizontal velocity 1.5 m/s and zero vertical velocity
+n_states = 4
 mean_init_state = np.array([0.0, 2.5, 1.5, 0.0])  # [qx, qy, qx_dot, qy_dot]
 mean_init_cov = 0.1 * np.eye(n_states)
 init_mode = "I"  # Modes are {I, J}
@@ -159,11 +197,8 @@ skf = SKF(
     init_mode=init_mode,
     init_cov=mean_init_cov,
     dt=dt,
-    noise_matrices=noise_matrices,
-    dynamics=dynamics,
-    resets=resets,
-    guards=guards,
     parameters=parameters,
+    hybrid_system=hybrid_system,
 )
 
 """ Initialize simulator. """
@@ -172,11 +207,8 @@ hybrid_simulator = HybridSimulator(
     init_state=actual_init_state,
     init_mode=init_mode,
     dt=dt,
-    noise_matrices=noise_matrices,
-    dynamics=dynamics,
-    resets=resets,
-    guards=guards,
     parameters=parameters,
+    hybrid_system=hybrid_system,
 )
 
 n_simulate_timesteps = 500
