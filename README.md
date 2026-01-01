@@ -67,7 +67,8 @@ filtered_state, filtered_cov = skf.update(current_time, inputs, measurement)
 The `scripts/` directory contains example implementations:
 
 - `simple_hybrid_system.py`: Basic hybrid system demonstration
-- `bouncing_ball_hybrid_system.py`: Bouncing ball with state estimation
+- `bouncing_ball_hybrid_system.py`: 1D bouncing ball with state estimation
+- `bouncing_ball_2d_hybrid_system.py`: 2D bouncing ball with horizontal motion
 
 Run examples after installation:
 
@@ -96,6 +97,25 @@ The plots show:
 - **Red dots**: Noisy measurements
 - **Blue dashed line**: SKF filtered estimates
 - **Colored regions** (time series): Different hybrid system modes
+
+### 2D Bouncing Ball Example Output
+
+The 2D bouncing ball example extends the basic bouncing ball to include horizontal motion, demonstrating the SKF's ability to track multi-dimensional hybrid systems with independent dynamics in different directions.
+
+**2D Trajectory:**
+
+![2D Bouncing Ball Trajectory](docs/bouncing_ball_2d_trajectory.png)
+
+**Time Series:**
+
+![2D Bouncing Ball Time Series](docs/bouncing_ball_2d_timeseries.png)
+
+The plots show:
+- **Black line**: Actual system states
+- **Red dots**: Noisy measurements
+- **Blue dashed line**: SKF filtered estimates
+- **Colored regions** (time series): Different hybrid system modes
+- **Brown line** (trajectory): Ground level
 
 ## Citation
 

@@ -1,12 +1,31 @@
+from typing import Callable, Dict, List, Optional, Tuple
+
 import numpy as np
 
 
 def solve_ivp_dynamics_func(
-    dynamics_dict, mode, inputs, dt, parameters, process_gaussian_noise=None
-):
-    """
-    Create a lambda from our dynamics which works with solve_ivp.
-    Process noise has to come in as an input.
+    dynamics_dict: Dict[str, Dict[str, Callable]],
+    mode: str,
+    inputs: np.ndarray,
+    dt: float,
+    parameters: np.ndarray,
+    process_gaussian_noise: Optional[Dict[str, np.ndarray]] = None,
+) -> Callable[[float, np.ndarray], np.ndarray]:
+    """Create dynamics function compatible with scipy.integrate.solve_ivp.
+
+    Args:
+        dynamics_dict: Dictionary of dynamics functions per mode.
+        mode: Current discrete mode identifier.
+        inputs: Control input vector.
+        dt: Time step.
+        parameters: System parameters.
+        process_gaussian_noise: Optional dict with 'mean' and 'cov' for process noise.
+
+    Returns:
+        Lambda function f(t, states) for use with solve_ivp.
+
+    Raises:
+        ValueError: If process noise size doesn't match input size.
     """
     if process_gaussian_noise is not None:
         process_noise = np.random.multivariate_normal(
@@ -26,17 +45,32 @@ def solve_ivp_dynamics_func(
         ).reshape(np.shape(states))
 
 
-def solve_ivp_guard_funcs(guards_dict, mode, inputs, dt, parameters):
+def solve_ivp_guard_funcs(
+    guards_dict: Dict[str, Dict[str, Dict[str, Callable]]],
+    mode: str,
+    inputs: np.ndarray,
+    dt: float,
+    parameters: np.ndarray,
+) -> Tuple[List[Callable], List[str]]:
+    """Create guard functions compatible with scipy.integrate.solve_ivp events.
+
+    Args:
+        guards_dict: Dictionary of guard functions per mode and transition.
+        mode: Current discrete mode identifier.
+        inputs: Control input vector.
+        dt: Time step.
+        parameters: System parameters.
+
+    Returns:
+        Tuple of (guard_functions, possible_target_modes).
     """
-    Create a lambda from our guards which works with solve_ivp.
-    """
-    guards = []
-    new_modes = []
+    guards: List[Callable] = []
+    new_modes: List[str] = []
     if mode in guards_dict:
         for key, val in guards_dict[mode].items():
             # Fix closure issue by using default argument to capture val
-            # Also flatten the result to return a scalar for solve_ivp
-            def guard(t, states, v=val):
+            # Flatten the result to return a scalar for solve_ivp
+            def guard(t: float, states: np.ndarray, v: Dict[str, Callable] = val) -> float:
                 return v["g"](states, inputs, dt, parameters).flatten()[0]
 
             guards.append(guard)
@@ -44,39 +78,66 @@ def solve_ivp_guard_funcs(guards_dict, mode, inputs, dt, parameters):
     return guards, new_modes
 
 
-def solve_ivp_extract_hybrid_events(sol, possible_modes):
-    """
-    Extracts the hybrid events during a solve_ivp solve.
+def solve_ivp_extract_hybrid_events(
+    sol, possible_modes: List[str]
+) -> Tuple[Optional[np.ndarray], Optional[float], Optional[str]]:
+    """Extract hybrid events from scipy.integrate.solve_ivp solution.
+
+    Args:
+        sol: Solution object from solve_ivp.
+        possible_modes: List of possible target modes corresponding to guards.
+
+    Returns:
+        Tuple of (event_state, event_time, new_mode) or (None, None, None) if no event.
     """
     for idx in range(len(possible_modes)):
-        """Assume we cannot activate multiple guards at once."""
+        # Assume we cannot activate multiple guards at once
         if sol.t_events[idx].size > 0:
             return (
                 sol.y_events[idx].flatten(),
                 sol.t_events[idx][0],
                 possible_modes[idx],
-            )  # Flatten creates a copy. TODO: change to reshape.
+            )  # Flatten creates a copy. TODO: change to reshape
     return None, None, None
 
 
 def compute_saltation_matrix(
-    pre_event_state,
-    inputs,
-    dt,
-    parameters,
-    pre_mode,
-    post_mode,
-    dynamics_dict,
-    resets_dict,
-    guards_dict,
-    post_event_state=None,
-):
-    """
-    Computes the saltation matrix.
-    TODO: Add in time dependencies.
+    pre_event_state: np.ndarray,
+    inputs: np.ndarray,
+    dt: float,
+    parameters: np.ndarray,
+    pre_mode: str,
+    post_mode: str,
+    dynamics_dict: Dict[str, Dict[str, Callable]],
+    resets_dict: Dict[str, Dict[str, Dict[str, Callable]]],
+    guards_dict: Dict[str, Dict[str, Dict[str, Callable]]],
+    post_event_state: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Compute saltation matrix for hybrid system mode transition.
+
+    The saltation matrix captures the discontinuous jump in state covariance
+    at mode boundaries, accounting for the reset map and guard surface geometry.
+
+    Args:
+        pre_event_state: State vector before mode transition.
+        inputs: Control input vector.
+        dt: Time step.
+        parameters: System parameters.
+        pre_mode: Mode before transition.
+        post_mode: Mode after transition.
+        dynamics_dict: Dictionary of dynamics functions per mode.
+        resets_dict: Dictionary of reset maps per transition.
+        guards_dict: Dictionary of guard functions per transition.
+        post_event_state: Optional state after reset. Computed if not provided.
+
+    Returns:
+        Saltation matrix for covariance propagation through mode transition.
+
+    Note:
+        TODO: Add in time dependencies.
     """
     if post_event_state is None:
-        """ Compute reset if not post event state is given. """
+        # Compute reset if post event state is not given
         post_event_state = resets_dict[pre_mode][post_mode]["r"](
             pre_event_state, inputs, dt, parameters
         ).reshape(np.shape(pre_event_state))

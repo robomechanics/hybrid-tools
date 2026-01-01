@@ -1,3 +1,5 @@
+from typing import Callable, Dict
+
 import numpy as np
 from scipy.integrate import solve_ivp
 
@@ -9,16 +11,34 @@ from .hybrid_helper_functions import (
 
 
 class HybridSimulator:
+    """Simulator for hybrid dynamical systems with discrete mode transitions.
+
+    Simulates continuous dynamics within modes and handles discrete jumps
+    at mode boundaries defined by guard conditions and reset maps.
+    """
+
     def __init__(
-        self, init_state, init_mode, dt, noise_matrices, dynamics, resets, guards, parameters
-    ):
-        """
-        init_state (np.array): Initial state.
-        noise_matrices (np.array): Noise matrices for each mode.
-        dynamics (dict): Dynamics for each mode.
-        resets (dict): Resets for each allowable transition.
-        guards (dict): Guards for each allowable transition.
-        parameters (np.array): Extra parameters of the system.
+        self,
+        init_state: np.ndarray,
+        init_mode: str,
+        dt: float,
+        noise_matrices: Dict[str, Dict[str, np.ndarray]],
+        dynamics: Dict[str, Dict[str, Callable]],
+        resets: Dict[str, Dict[str, Dict[str, Callable]]],
+        guards: Dict[str, Dict[str, Callable]],
+        parameters: np.ndarray,
+    ) -> None:
+        """Initialize the hybrid system simulator.
+
+        Args:
+            init_state: Initial state vector.
+            init_mode: Initial discrete mode identifier.
+            dt: Time step for simulation.
+            noise_matrices: Process ('W') and measurement ('V') noise covariance matrices per mode.
+            dynamics: Continuous dynamics and measurement functions per mode.
+            resets: Reset maps for state transitions between modes.
+            guards: Guard functions defining mode transition conditions.
+            parameters: Additional system parameters.
         """
         self._current_state = init_state
         self._current_mode = init_mode
@@ -30,20 +50,26 @@ class HybridSimulator:
         self._noise_matrices = noise_matrices
         self._n_states = np.shape(self._current_state)[0]
 
-    def simulate_timestep(self, current_time, inputs):
-        """
-        Simulates for one dt.
+    def simulate_timestep(self, current_time: float, inputs: np.ndarray) -> None:
+        """Simulate the hybrid system for one time step.
+
+        Integrates continuous dynamics and handles mode transitions when
+        guard conditions are triggered.
+
+        Args:
+            current_time: Current simulation time.
+            inputs: Control input vector.
         """
         end_time = current_time + self._dt
 
-        """ Get noise parameters. """
+        # Get noise parameters
         process_gaussian_noise = {
             "mean": np.zeros(
                 self._noise_matrices[self._current_mode]["W"].shape[0]
             ),  # TODO: This should be member variable
             "cov": self._noise_matrices[self._current_mode]["W"],
         }
-        """ Integrate for dt. """
+        # Integrate for dt
         current_dynamics = solve_ivp_dynamics_func(
             self._dynamics_dict,
             self._current_mode,
@@ -64,7 +90,7 @@ class HybridSimulator:
         )
         current_state = np.zeros(self._n_states)
 
-        """ If we hit guard, apply reset. """
+        # If we hit guard, apply reset
         (
             hybrid_event_state,
             hybrid_event_time,
@@ -72,12 +98,12 @@ class HybridSimulator:
         ) = solve_ivp_extract_hybrid_events(sol, possible_modes)
 
         while new_mode is not None:
-            """Apply reset."""
+            # Apply reset
             current_state = self._resets_dict[self._current_mode][new_mode]["r"](
                 hybrid_event_state, inputs, self._dt, self._parameters
             ).reshape(np.shape(hybrid_event_state))
 
-            """ Update guard and simulate. """
+            # Update guard and simulate
             self._current_mode = new_mode
             current_dynamics = solve_ivp_dynamics_func(
                 self._dynamics_dict,
@@ -105,14 +131,22 @@ class HybridSimulator:
                 new_mode,
             ) = solve_ivp_extract_hybrid_events(sol, possible_modes)
 
-        """ Once no more hybrid events, grab the terminal states. """
+        # Once no more hybrid events, grab the terminal states
         for idx in range(len(sol.y)):
-            """Grab the state at the last timestep."""
+            # Grab the state at the last timestep
             current_state[idx] = sol.y[idx][-1]
 
         self._current_state = current_state
 
-    def get_measurement(self, measurement_noise_flag=False):
+    def get_measurement(self, measurement_noise_flag: bool = False) -> np.ndarray:
+        """Get measurement from current state.
+
+        Args:
+            measurement_noise_flag: If True, add measurement noise to output.
+
+        Returns:
+            Measurement vector, optionally with added noise.
+        """
         measurement = self._dynamics_dict[self._current_mode]["y"](
             self._current_state,
             self._parameters,
@@ -128,9 +162,15 @@ class HybridSimulator:
                 measurement_gaussian_noise["mean"], measurement_gaussian_noise["cov"]
             )
 
-    def get_state(self):
+    def get_state(self) -> np.ndarray:
+        """Get a copy of the current state vector.
+
+        Returns:
+            Copy of current state vector.
+        """
         return self._current_state.copy()
 
     @property
-    def current_mode(self):
+    def current_mode(self) -> str:
+        """Current discrete mode of the system."""
         return self._current_mode
