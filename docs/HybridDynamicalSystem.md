@@ -118,7 +118,7 @@ The system automatically validates on creation:
 ## Visualization
 
 ```python
-hybrid_system.draw_mode_graph("system.png")  # Requires: pip install graphviz
+hybrid_system.draw_mode_graph("system.png")
 ```
 
 **Example Output:**
