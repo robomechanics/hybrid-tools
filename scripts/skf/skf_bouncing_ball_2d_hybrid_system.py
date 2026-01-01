@@ -4,6 +4,8 @@ import numpy as np
 from hybrid_tools import SKF, HybridSimulator
 from hybrid_tools.basic_hybrid_systems import bouncing_ball_2d
 
+GROUND_HEIGHT = 0.0
+
 """ Define dynamics and resets. """
 hybrid_system = bouncing_ball_2d()
 
@@ -27,7 +29,7 @@ dt = 0.005
 # Parameters: [e (coefficient of restitution), g (gravity)]
 # e = 0.8 means ball retains 80% of velocity after bounce
 # g = 9.81 m/s^2 (standard gravity)
-parameters = np.array([0.8, 9.81])
+parameters = np.array([0.8, 9.81, GROUND_HEIGHT])
 
 """ Initialize filter. """
 skf = SKF(
@@ -82,7 +84,7 @@ plt.plot(
 plt.plot(
     filtered_states[:, 0], filtered_states[:, 1], "b--", label="Filtered trajectory", linewidth=1.5
 )
-plt.axhline(y=0, color="brown", linestyle="-", linewidth=2, label="Ground")
+plt.axhline(y=GROUND_HEIGHT, color="brown", linestyle="-", linewidth=2, label="Ground")
 plt.xlabel("Horizontal Position (m)", fontsize=12)
 plt.ylabel("Vertical Position (m)", fontsize=12)
 plt.title("2D Bouncing Ball Trajectory", fontsize=14, fontweight="bold")

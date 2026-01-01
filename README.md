@@ -9,6 +9,7 @@ This package provides tools for working with hybrid dynamical systems - systems 
 ## Features
 
 - **Salted Kalman Filter (SKF)**: State estimation for hybrid systems with mode transitions
+- **Shooting Method Optimizer**: Trajectory optimization for hybrid systems using adjoint-based gradients
 - **Hybrid System Simulator**: Simulate hybrid dynamical systems with guards and resets
 - **Saltation Matrix Computation**: Linearization tools for hybrid systems
 - **Example Scripts**: Ready-to-run examples demonstrating the package capabilities
@@ -106,20 +107,33 @@ hybrid_system = bouncing_ball()
 
 ## Examples
 
-The `scripts/skf/` directory contains example implementations:
+### State Estimation Examples
+
+The `scripts/skf/` directory contains state estimation examples:
 
 - `skf_simple_hybrid_system.py`: Basic hybrid system demonstration
 - `skf_bouncing_ball_hybrid_system.py`: 1D bouncing ball with state estimation
 - `skf_bouncing_ball_2d_hybrid_system.py`: 2D bouncing ball with horizontal motion
 
+### Trajectory Optimization Examples
+
+The `scripts/trajectory_optimizaiton/` directory contains shooting method optimization examples:
+
+- `shooting_bouncing_ball_2d_hybrid_system.py`: Optimize initial velocity to reach a target position
+- `shooting_bouncing_ball_2d_velocity_sweep.py`: Sweep through different initial velocities
+
 Run examples after installation:
 
 ```bash
-# With uv
+# State estimation example
 uv run python scripts/skf/skf_bouncing_ball_hybrid_system.py
+
+# Trajectory optimization example
+uv run python scripts/trajectory_optimizaiton/shooting_bouncing_ball_2d_hybrid_system.py
 
 # Or with pip
 python scripts/skf/skf_bouncing_ball_hybrid_system.py
+python scripts/trajectory_optimizaiton/shooting_bouncing_ball_2d_hybrid_system.py
 ```
 
 ### Bouncing Ball Example Output
@@ -158,6 +172,40 @@ The plots show:
 - **Blue dashed line**: SKF filtered estimates
 - **Colored regions** (time series): Different hybrid system modes
 - **Brown line** (trajectory): Ground level
+
+### Shooting Method Optimization Examples
+
+The shooting method optimizer uses adjoint-based gradients and the Levenberg-Marquardt algorithm to optimize initial conditions (e.g., velocities) to reach target states in hybrid dynamical systems.
+
+#### Optimizing Initial Velocity to Reach Target
+
+This example demonstrates optimizing the initial velocity of a 2D bouncing ball to reach a specific target position.
+
+![Shooting Method Optimization](docs/shooting_ball_hybrid_system.png)
+
+The plot shows:
+- **Gray lines**: Trajectories from each optimization iteration
+- **Red line**: Final optimized trajectory
+- **Green star**: Target position
+- **Blue circle**: Starting position
+- **Brown line**: Ground level
+
+#### Optimizing Downward Trajectory
+
+This example shows optimization when the target is below the starting position, requiring a downward initial velocity.
+
+![Shooting Method Downward](docs/shooting_ball_hybrid_system_downwards.png)
+
+#### Velocity Sweep Analysis
+
+This example sweeps through different initial velocities to visualize the reachable set and optimization landscape.
+
+![Shooting Method Velocity Sweep](docs/shooting_ball_hybrid_system_velocity_sweep.png)
+
+The plot shows:
+- **Multiple trajectories**: Different initial velocity combinations
+- **Color gradient**: Indicates distance to target (darker = closer)
+- **Optimization path**: Shows how the optimizer navigates the solution space
 
 ## Citation
 

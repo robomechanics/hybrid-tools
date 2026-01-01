@@ -26,10 +26,10 @@ def symbolic_dynamics():
     """
     Returns HybridDynamicalSystem: 2D Bouncing Ball hybrid system.
 
-    2D Bouncing Ball: Modes are {'I','J'}. e is coefficient of restitution.
+    2D Bouncing Ball: Modes are {'I','J'}. e is coefficient of restitution. h is the height of the floor.
     States: [qx, qy, qx_dot, qy_dot] - horizontal pos, vertical pos, horizontal vel, vertical vel
     """
-    qx, qy, qx_dot, qy_dot, e, g, ux, uy, dt = sp.symbols("qx qy qx_dot qy_dot e g ux uy dt")
+    qx, qy, qx_dot, qy_dot, e, g, h, ux, uy, dt = sp.symbols("qx qy qx_dot qy_dot e g h ux uy dt")
 
     """ Define the states and inputs. """
     inputs = Matrix([ux, uy])
@@ -77,8 +77,8 @@ def symbolic_dynamics():
     RJI = rJI.jacobian(states)
 
     """ Define guards. """
-    # Guard triggers when ball hits ground: qy <= 0
-    gIJ = Matrix([qy])
+    # Guard triggers when ball hits ground: qy <= h
+    gIJ = Matrix([qy - h])
     gJI = Matrix([qy_dot])
 
     """ Take the jacobian of guards with respect to states. """
@@ -87,7 +87,7 @@ def symbolic_dynamics():
 
     """ Define the parameters of the system. """
     # Parameters: coefficient of restitution (e) and gravity (g)
-    parameters = Matrix([e, g])
+    parameters = Matrix([e, g, h])
 
     rIJ_func = sp.lambdify((states, inputs, dt, parameters), rIJ)
     RIJ_func = sp.lambdify((states, inputs, dt, parameters), RIJ)
