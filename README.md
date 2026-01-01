@@ -189,7 +189,7 @@ The shooting method optimizer uses adjoint-based gradients and the Levenberg-Mar
 
 #### Optimizing Initial Velocity to Reach Target
 
-This example demonstrates optimizing the initial velocity of a 2D bouncing ball to reach a specific target position.
+This example solves the trajectory optimization problem from [Underactuated Robotics Example 17.2 (A basketball trickshot)](https://underactuated.csail.mit.edu/contact.html#example2) where we optimize the initial velocity of a 2D bouncing ball to reach a specific target position after a set amount of time. 
 
 ![Shooting Method Optimization](docs/shooting_ball_hybrid_system.png)
 
