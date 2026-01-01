@@ -16,7 +16,17 @@ This package provides tools for working with hybrid dynamical systems - systems 
 
 ## Installation
 
-### Quick Install with uv (Recommended)
+### Install from PyPI (Recommended)
+
+The package is now available on PyPI:
+
+```bash
+pip install hybrid-tools
+```
+
+### Alternative: Install from Source
+
+#### Quick Install with uv
 
 ```bash
 # Install uv if you haven't already
@@ -28,7 +38,7 @@ cd hybrid-tools
 uv sync
 ```
 
-### Alternative: Install with pip
+#### Install with pip
 
 ```bash
 pip install git+https://github.com/robomechanics/hybrid-tools.git

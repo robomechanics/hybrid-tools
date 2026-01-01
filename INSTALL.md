@@ -2,7 +2,42 @@
 
 ## Installing hybrid-tools
 
-### Option 1: Using uv (Recommended)
+### Option 1: Install from PyPI (Recommended)
+
+The package is now available on PyPI and can be installed directly:
+
+```bash
+pip install hybrid-tools
+```
+
+This is the simplest and recommended method for most users.
+
+### Option 2: Install from Wheel (Pre-built Distribution)
+
+If you have a pre-built wheel file (`.whl`), you can install it directly:
+
+```bash
+# Install from a local wheel file
+pip install dist/hybrid_tools-0.1.0-py3-none-any.whl
+
+# Or if the wheel is in a different location
+pip install /path/to/hybrid_tools-0.1.0-py3-none-any.whl
+```
+
+**Building your own wheel:**
+
+```bash
+# Install build tools
+pip install build
+
+# Build the wheel (creates both .whl and .tar.gz in dist/)
+python -m build
+
+# Install the newly built wheel
+pip install dist/hybrid_tools-0.1.0-py3-none-any.whl
+```
+
+### Option 3: Using uv (Recommended for Development)
 
 [uv](https://github.com/astral-sh/uv) is a fast Python package installer and resolver. This is the recommended method for development.
 
@@ -21,7 +56,7 @@ uv sync
 uv sync --all-extras
 ```
 
-### Option 2: Install from source (Development Mode with pip)
+### Option 4: Install from source (Development Mode with pip)
 
 ```bash
 # Clone the repository
@@ -35,7 +70,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-### Option 3: Install from source (Standard with pip)
+### Option 5: Install from source (Standard with pip)
 
 ```bash
 # Clone the repository
@@ -46,7 +81,7 @@ cd hybrid-tools
 pip install .
 ```
 
-### Option 4: Install directly from GitHub
+### Option 6: Install directly from GitHub
 
 ```bash
 pip install git+https://github.com/robomechanics/hybrid-tools.git
@@ -58,19 +93,105 @@ After installation, verify that the package is installed correctly:
 
 ```python
 import hybrid_tools
-print(hybrid_tools.__version__)
+print(hybrid_tools.__version__)  # Should print: 0.1.0
 
 # Import main classes
 from hybrid_tools import SKF, HybridSimulator
 ```
 
+## Distribution
+
+### Building Distribution Files
+
+To create distribution files for sharing or publishing:
+
+```bash
+# Install build tools if not already installed
+pip install build
+
+# Build both wheel (.whl) and source distribution (.tar.gz)
+python -m build
+
+# Output files will be in the dist/ directory:
+# - hybrid_tools-0.1.0-py3-none-any.whl (wheel)
+# - hybrid_tools-0.1.0.tar.gz (source distribution)
+```
+
+### Managing Dependencies
+
+**Important:** Keep runtime dependencies minimal! Only include packages that are **required** for users to run your code.
+
+**Runtime dependencies** (in `dependencies` list):
+- Only packages needed to use the library
+- Current runtime dependencies: `numpy`, `scipy`, `sympy`, `matplotlib`
+
+**Development dependencies** (in `[project.optional-dependencies]`):
+- Testing tools: `pytest`, `pytest-cov`
+- Linting/formatting: `ruff`, `mypy`
+- Development tools: `pre-commit`
+
+**Build/publish tools** (install separately, NOT in pyproject.toml):
+- `build` - for building wheels
+- `twine` - for uploading to PyPI
+
+These should be installed separately when needed:
+```bash
+pip install build twine
+```
+
+### Publishing to PyPI
+
+**Note:** The package is already published on PyPI at https://pypi.org/project/hybrid-tools/
+
+To update the package on PyPI with a new version:
+
+1. **Update the version number** in `pyproject.toml`
+
+2. **Review dependencies** in `pyproject.toml`:
+   - Ensure only necessary runtime dependencies are in the `dependencies` list
+   - Move development tools to `[project.optional-dependencies]`
+   - Never include `build` or `twine` in dependencies
+
+3. **Build the distribution files:**
+   ```bash
+   # Install build tools (if not already installed)
+   pip install build twine
+   
+   # Clean previous builds
+   rm -rf dist/
+   
+   # Build new distribution files
+   python -m build
+   ```
+
+4. **Upload to PyPI:**
+   ```bash
+   # Upload to PyPI (you'll be prompted for your API token)
+   python -m twine upload dist/*
+   ```
+
+**Important Notes:**
+- You need a PyPI account and API token to upload
+- The version number in `pyproject.toml` must be higher than the current published version
+- It's recommended to test on Test PyPI first for major updates:
+  ```bash
+  python -m twine upload --repository testpypi dist/*
+  ```
+
+After publishing, users can install the new version with:
+```bash
+pip install --upgrade hybrid-tools
+```
+
 ## Dependencies
 
-The package requires the following dependencies (automatically installed):
+The package requires the following runtime dependencies (automatically installed):
 - numpy >= 1.20.0
 - scipy >= 1.7.0
 - sympy >= 1.9
 - matplotlib >= 3.3.0
+
+**Note:** If you previously had `graphviz` or `twine` listed as dependencies, these have been removed as they are not required for normal package usage. `graphviz` is only needed if you want to visualize graphs, and `twine` is only needed for publishing packages to PyPI.
 
 ## Running Examples
 

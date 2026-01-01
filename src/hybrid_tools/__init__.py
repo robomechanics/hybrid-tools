@@ -1,5 +1,7 @@
 """Hybrid Tools: A library for hybrid dynamical systems simulation and filtering."""
 
+__version__ = "0.1.0"
+
 from .hybrid_simulator import HybridSimulator
 from .skf import SKF
 from .types import (
@@ -18,6 +20,7 @@ from .types import (
 )
 
 __all__ = [
+    "__version__",
     "HybridSimulator",
     "SKF",
     "ModeDynamics",
