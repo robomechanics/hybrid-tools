@@ -38,9 +38,15 @@ For detailed installation instructions and development setup, see [INSTALL.md](I
 ## Quick Start
 
 ```python
+from hybrid_tools import SKF, HybridSimulator
+from hybrid_tools.basic_hybrid_systems import bouncing_ball
+import numpy as np
+
+# Use a pre-defined hybrid system
+hybrid_system = bouncing_ball()
+
+# Or define your own hybrid system
 from hybrid_tools import (
-    SKF,
-    HybridSimulator,
     HybridDynamicalSystem,
     ModeDynamics,
     ModeReset,
@@ -50,12 +56,9 @@ from hybrid_tools import (
     create_resets,
     create_guards,
 )
-import numpy as np
-
-# Define your hybrid system components
-# (see docs/HybridDynamicalSystem.md for detailed guide)
 
 # Create dynamics, resets, guards, and noises
+# (see docs/HybridDynamicalSystem.md for detailed guide)
 dynamics = create_dynamics([...])
 resets = create_resets([...])
 guards = create_guards([...])
@@ -86,22 +89,37 @@ filtered_state, filtered_cov = skf.update(current_time, inputs, measurement)
 
 **📖 For a complete guide on defining hybrid systems, see [HybridDynamicalSystem Documentation](docs/HybridDynamicalSystem.md)**
 
+## Pre-defined Hybrid Systems
+
+The package includes ready-to-use hybrid system definitions in `hybrid_tools.basic_hybrid_systems`:
+
+```python
+from hybrid_tools.basic_hybrid_systems import (
+    bouncing_ball,      # 1D bouncing ball
+    bouncing_ball_2d,   # 2D bouncing ball with horizontal motion
+    simple_system,      # Basic 2-state hybrid system
+)
+
+# Use directly in your code
+hybrid_system = bouncing_ball()
+```
+
 ## Examples
 
-The `scripts/` directory contains example implementations:
+The `scripts/skf/` directory contains example implementations:
 
-- `simple_hybrid_system.py`: Basic hybrid system demonstration
-- `bouncing_ball_hybrid_system.py`: 1D bouncing ball with state estimation
-- `bouncing_ball_2d_hybrid_system.py`: 2D bouncing ball with horizontal motion
+- `skf_simple_hybrid_system.py`: Basic hybrid system demonstration
+- `skf_bouncing_ball_hybrid_system.py`: 1D bouncing ball with state estimation
+- `skf_bouncing_ball_2d_hybrid_system.py`: 2D bouncing ball with horizontal motion
 
 Run examples after installation:
 
 ```bash
 # With uv
-uv run python scripts/bouncing_ball_hybrid_system.py
+uv run python scripts/skf/skf_bouncing_ball_hybrid_system.py
 
 # Or with pip
-python scripts/bouncing_ball_hybrid_system.py
+python scripts/skf/skf_bouncing_ball_hybrid_system.py
 ```
 
 ### Bouncing Ball Example Output

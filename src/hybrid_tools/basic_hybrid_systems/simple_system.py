@@ -1,12 +1,17 @@
-import matplotlib.pyplot as plt
+"""Simple Hybrid System.
+
+This module defines a simple hybrid dynamical system with two modes.
+States: [x1, x2]
+Modes: {'I', 'J'} representing different phases of motion
+Parameters: None
+"""
+
 import numpy as np
 import sympy as sp
 from sympy.matrices import Matrix
 
 from hybrid_tools import (
-    SKF,
     HybridDynamicalSystem,
-    HybridSimulator,
     ModeDynamics,
     ModeGuard,
     ModeNoise,
@@ -19,7 +24,10 @@ from hybrid_tools import (
 
 def symbolic_dynamics():
     """
-    Returns (Tuple[Dict, Dict]): dynamic functions in a nested dict and reset functions in a nested dict.
+    Returns HybridDynamicalSystem: Simple hybrid system with two modes.
+
+    States: [x1, x2]
+    Modes: {'I', 'J'}
     """
     x1, x2, u1, u2, dt = sp.symbols("x1 x2 u1 u2 dt")
 
@@ -35,7 +43,7 @@ def symbolic_dynamics():
     yI = Matrix([x1, x2])
     yJ = Matrix([x1, x2])
 
-    """ Discretize the dynamics usp.sing euler integration. """
+    """ Discretize the dynamics using euler integration. """
     fI_disc = states + fI * dt
     fJ_disc = states + fJ * dt
 
@@ -52,13 +60,13 @@ def symbolic_dynamics():
     """ Define resets. """
     rIJ = Matrix([x1, x2])
 
-    """ Take the jacobian of resets with resepct to states. """
+    """ Take the jacobian of resets with respect to states. """
     RIJ = rIJ.jacobian(states)
 
     """ Define guards. """
     gIJ = Matrix([-x1])
 
-    """ Take the jacobian of resets with resepct to guards. """
+    """ Take the jacobian of guards with respect to states. """
     GIJ = gIJ.jacobian(states)
 
     """ Define the parameters of the system. """
@@ -136,64 +144,3 @@ def symbolic_dynamics():
         guards=guards,
         noises=noises,
     )
-
-
-""" Define dynamics and resets. """
-hybrid_system = symbolic_dynamics()
-
-""" Initialize states and covariance. """
-n_states = 2
-mean_init_state = np.array([-2.5, 0])
-mean_init_cov = 0.1 * np.eye(n_states)
-init_mode = "I"  # Modes are {I, J}
-
-""" Define timesteps. """
-dt = 0.1
-
-""" Define parameters. """
-parameters = np.array([])
-
-""" Initialize filter. """
-skf = SKF(
-    init_state=mean_init_state,
-    init_mode=init_mode,
-    init_cov=mean_init_cov,
-    dt=dt,
-    parameters=parameters,
-    hybrid_system=hybrid_system,
-)
-
-""" Initialize simulator. """
-actual_init_state = np.random.multivariate_normal(mean_init_state, mean_init_cov)
-hybrid_simulator = HybridSimulator(
-    init_state=actual_init_state,
-    init_mode=init_mode,
-    dt=dt,
-    parameters=parameters,
-    hybrid_system=hybrid_system,
-)
-
-n_simulate_timesteps = 50
-timesteps = np.arange(0.0, n_simulate_timesteps * dt, dt)
-measurements = np.zeros((n_simulate_timesteps - 1, n_states))
-actual_states = np.zeros((n_simulate_timesteps, n_states))
-filtered_states = np.zeros((n_simulate_timesteps, n_states))
-
-actual_states[0, :] = hybrid_simulator.get_state()
-filtered_states[0, :] = mean_init_state
-
-zero_input = np.array([0.0, 0.0])
-for time_idx in range(1, n_simulate_timesteps):
-    hybrid_simulator.simulate_timestep(0, zero_input)
-    actual_states[time_idx, :] = hybrid_simulator.get_state()
-    measurements[time_idx - 1, :] = hybrid_simulator.get_measurement(measurement_noise_flag=True)
-    skf.predict(timesteps[time_idx], zero_input)
-    filtered_states[time_idx, :], current_cov = skf.update(
-        timesteps[time_idx], zero_input, measurements[time_idx - 1, :]
-    )
-
-plt.plot(actual_states[:, 0], actual_states[:, 1], "k-", label="Actual states")
-plt.plot(measurements[:, 0], measurements[:, 1], "r.", label="Measurements")
-plt.plot(filtered_states[:, 0], filtered_states[:, 1], "b--", label="Filtered states")
-plt.legend()
-plt.show()
